@@ -176,12 +176,12 @@
         showGame();
       });
       
-      // Touch events for mobile
-      splashScreen.addEventListener('touchstart', (e) => {
+      // Touch events for mobile - use touchend for better reliability
+      splashScreen.addEventListener('touchend', (e) => {
         console.log('Splash screen touched');
-        e.preventDefault();
+        e.preventDefault(); // Prevent click event from also firing
         showGame();
-      });
+      }, { passive: false });
       
       // Keyboard support for splash screen
       document.addEventListener('keydown', (e) => {
@@ -528,7 +528,8 @@
 
   // ====== Controls ======
   // Canvas click handler for different screens
-  canvas.addEventListener('click', () => {
+  // Handle screen navigation and interactions
+  function handleCanvasInteraction() {
     if (state.currentScreen === 'win') {
       // Go to final screen when win screen is clicked
       // Randomize product selection (1-15)
@@ -545,11 +546,24 @@
       // Restart game when lose screen is clicked
       restartGame();
       console.log('Restarting game from lose screen');
+    } else if (state.currentScreen === 'game' && state.running && !state.paused) {
+      // Jump during gameplay
+      console.log('Cart jumping (touch/click)...');
+      cart.jump();
     } else {
       canvas.focus();
       console.log('Canvas focused');
     }
-  });
+  }
+
+  canvas.addEventListener('click', handleCanvasInteraction);
+  
+  // Touch event for mobile - use touchend for better reliability
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault(); // Prevent click event from also firing
+    console.log('Canvas touched');
+    handleCanvasInteraction();
+  }, { passive: false });
   
   // Removed button event listeners - buttons no longer exist
   

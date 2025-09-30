@@ -43,6 +43,12 @@ canvas {
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
   image-rendering: pixelated;
+  /* Mobile touch optimizations */
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Optimized for 1080x1920 portrait screens */
@@ -271,6 +277,11 @@ canvas {
   box-shadow: 0 8px 16px rgba(0,0,0,0.3);
   transition: all 0.3s ease;
   animation: pulse 2s infinite;
+  /* Mobile touch optimizations */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(255, 107, 107, 0.3);
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .start-button:hover {
