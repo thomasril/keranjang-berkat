@@ -177,11 +177,11 @@
       });
       
       // Touch events for mobile - use touchend for better reliability
-      splashScreen.addEventListener('touchend', (e) => {
+      splashScreen.addEventListener('touchstart', (e) => {
         console.log('Splash screen touched');
         e.preventDefault(); // Prevent click event from also firing
         showGame();
-      }, { passive: false });
+      });
       
       // Keyboard support for splash screen
       document.addEventListener('keydown', (e) => {
@@ -559,7 +559,7 @@
   canvas.addEventListener('click', handleCanvasInteraction);
   
   // Touch event for mobile - use touchend for better reliability
-  canvas.addEventListener('touchend', (e) => {
+  canvas.addEventListener('touchstart', (e) => {
     e.preventDefault(); // Prevent click event from also firing
     console.log('Canvas touched');
     handleCanvasInteraction();
