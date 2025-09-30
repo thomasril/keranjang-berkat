@@ -16,7 +16,7 @@
       // Try to play music on load
       const playMusic = () => {
         music.play().catch(error => {
-          console.log("Autoplay failed, waiting for user interaction...");
+          // Autoplay blocked by browser - will play on user interaction
         });
       };
       
@@ -126,7 +126,6 @@
       window.cart.y = state.groundY - groundOffset - window.cart.h;
     }
     
-    console.log(`Canvas resized to: ${canvasWidth}x${canvasHeight} (9:16 ratio), scale: ${window.gameScale.toFixed(3)}`);
   }
   
   window.addEventListener('resize', resizeCanvas);
@@ -178,8 +177,11 @@
     const music = document.getElementById('bgMusic');
     if (music) {
       music.muted = false;
-      music.play().catch(err => console.log('Audio autoplay prevented:', err));
+      music.play().catch(err => { /* Audio autoplay prevented */ });
     }
+    
+    // Reset timing to prevent lag/delay after idle on splash screen
+    state.lastTs = 0;
     
     // Focus canvas and start game
     canvas.focus();
@@ -449,7 +451,9 @@
 
   const audio = {
     ctx: null, analyser: null, data: null, enabled: false,
-    lastTrigger: 0, smoothing: 0.2
+    lastTrigger: 0, smoothing: 0.2,
+    smoothedLevel: 0, // For exponential smoothing
+    wasAboveThreshold: false // Track if we were already above threshold (edge detection)
   };
 
   async function enableMic() {
@@ -459,17 +463,14 @@
       const src = audio.ctx.createMediaStreamSource(stream);
       audio.analyser = audio.ctx.createAnalyser();
       audio.analyser.fftSize = 1024;
-      audio.analyser.smoothingTimeConstant = 0.2;
+      audio.analyser.smoothingTimeConstant = 0.8; // Balanced smoothing (was 0.8) - smooths peaks but allows drops between words
       src.connect(audio.analyser);
       audio.data = new Uint8Array(audio.analyser.frequencyBinCount);
       audio.enabled = true;
       state.micEnabled = true;
-      console.log('Microphone enabled');
-      // Button update removed
     } catch(e) {
       console.error('Microphone access denied:', e);
       state.micEnabled = false;
-      // Button update removed
     }
   }
 
@@ -481,43 +482,34 @@
       const dev = Math.abs(audio.data[i] - 128);
       if (dev > maxDev) maxDev = dev;
     }
-    return maxDev / 128;
+    const rawLevel = maxDev / 128;
+    
+    // Apply exponential smoothing to reduce jitter and multiple peaks
+    const smoothingFactor = 0.3; // More responsive (was 0.3) - balances smoothing with responsiveness
+    audio.smoothedLevel = (smoothingFactor * rawLevel) + ((1 - smoothingFactor) * audio.smoothedLevel);
+    
+    return audio.smoothedLevel;
   }
 
   function handleVoiceJump(level) {
     const now = performance.now();
-    const threshold = 0.1; // Lower threshold to catch quieter sounds
-    const cooldown = 200; // Shorter cooldown for more responsive jumping
+    const threshold = 0.25; // Higher threshold - less sensitive
+    const cooldown = 300; // Shorter cooldown for faster response (was 600ms)
     
-    // Debug logging
-    if (level > 0.05) { // Log any significant sound
-      console.log(`Sound detected: ${level.toFixed(3)}, Threshold: ${threshold}, Cooldown: ${now - audio.lastTrigger}ms`);
-    }
+    const isAboveThreshold = level >= threshold;
     
-    if (level >= threshold && (now - audio.lastTrigger) > cooldown) {
+    // Rising edge detection: Only trigger when crossing from below to above threshold
+    // AND cooldown has passed
+    if (isAboveThreshold && !audio.wasAboveThreshold && (now - audio.lastTrigger) > cooldown) {
       audio.lastTrigger = now;
       
-      // Calculate jump strength based on volume level
-      // Higher volume = stronger jump
-      const minJumpStrength = state.jumpVelocity; // -800 (normal jump)
-      // Calculate max jump to reach about 80% of screen height from cart position
-      const cartGroundLevel = state.groundY - 100;
-      const maxJumpHeight = cartGroundLevel * 0.8; // 80% of available height
-      const maxJumpStrength = -Math.sqrt(2 * state.gravity * maxJumpHeight); // Physics-based calculation
-      const clampedMaxJump = Math.max(maxJumpStrength, state.jumpVelocity * 1.5); // Ensure reasonable minimum
+      // Flappy Bird style: Use consistent flap velocity
+      cart.jump();
       
-      // Map volume level (0.1 to 1.0) to jump strength
-      const volumeRange = 1.0 - threshold; // 0.9
-      const normalizedVolume = Math.min((level - threshold) / volumeRange, 1.0);
-      
-      // Calculate dynamic jump velocity using clamped maximum
-      const jumpStrength = minJumpStrength + (clampedMaxJump - minJumpStrength) * normalizedVolume;
-      
-      // Apply the dynamic jump
-      cart.jumpWithStrength(jumpStrength);
-      
-      console.log(`🎤 JUMP! Volume: ${level.toFixed(2)}, Jump strength: ${jumpStrength.toFixed(0)}`);
     }
+    
+    // Update threshold state for next frame
+    audio.wasAboveThreshold = isAboveThreshold;
   }
 
   // ====== Controls ======
@@ -529,24 +521,18 @@
       // Randomize product selection (1-15)
       state.selectedProduct = Math.floor(Math.random() * 15) + 1;
       state.currentScreen = 'final';
-      console.log('Moving to final screen');
-      console.log(`Selected random product: ${state.selectedProduct}`);
       draw(getLoudness()); // Force redraw the final screen immediately
     } else if (state.currentScreen === 'final') {
       // Restart game when final screen is clicked
       restartGame();
-      console.log('Restarting game from final screen');
     } else if (state.currentScreen === 'lose') {
       // Restart game when lose screen is clicked
       restartGame();
-      console.log('Restarting game from lose screen');
     } else if (state.currentScreen === 'game' && state.running && !state.paused) {
       // Jump during gameplay
-      console.log('Cart jumping (touch/click)...');
       cart.jump();
     } else {
       canvas.focus();
-      console.log('Canvas focused');
     }
   }
 
@@ -555,55 +541,32 @@
   // Touch event for mobile - use touchend for better reliability
   canvas.addEventListener('touchend', (e) => {
     e.preventDefault(); // Prevent click event from also firing
-    console.log('Canvas touched');
     handleCanvasInteraction();
   }, { passive: false });
   
-  // Removed button event listeners - buttons no longer exist
-  
-  // Button update function removed - no buttons to update
-  
   // Global keyboard event listener (backup)
   document.addEventListener('keydown', (e) => {
-    console.log('Key pressed:', e.code); // Debug log
-    
     if (e.code === 'KeyM') {
       e.preventDefault();
-      console.log('Enabling microphone...');
       enableMic();
     }
     if (e.code === 'Space') { 
       e.preventDefault();
       if (!state.running) {
-        console.log('Starting game...');
         startGame();
       } else if (!state.paused) {
-        console.log('Cart jumping...');
         cart.jump();
       }
     }
     if (e.code === 'KeyR') {
       e.preventDefault();
-      console.log('Restarting game...');
       startGame();
     }
     if (e.code === 'KeyP') {
       e.preventDefault();
       if (state.running) {
         state.paused = !state.paused;
-        // Button update removed
-        console.log('Game paused:', state.paused);
       }
-    }
-  });
-  
-  // Also listen on canvas specifically
-  canvas.addEventListener('keydown', (e) => {
-    console.log('Canvas key pressed:', e.code);
-    // Same handlers as above, but just in case
-    if (e.code === 'Space' && state.running && !state.paused) { 
-      e.preventDefault();
-      cart.jump();
     }
   });
 
@@ -635,7 +598,6 @@
     const gameTime = 30; // seconds
     state.scrollSpeed = totalDistance / gameTime; // pixels per second
     
-    console.log(`Calculated scroll speed: ${state.scrollSpeed} pixels/second for 2x loops`);
   }
 
   function restartGame() {
@@ -724,6 +686,12 @@
   }
 
   function update(ts) {
+    // Skip all game logic if on splash screen (performance optimization)
+    if (state.currentScreen === 'splash') {
+      requestAnimationFrame(update);
+      return;
+    }
+    
     if (!state.lastTs) state.lastTs = ts;
     
     // Better deltaTime handling to prevent stuttering
@@ -822,11 +790,13 @@
   function draw(level) {
     const W = canvas.width, H = canvas.height;
 
+    // Skip drawing if on splash screen (save performance)
+    if (state.currentScreen === 'splash') {
+      return; // Don't clear or draw anything on splash screen
+    }
+
     // Clear canvas
     ctx.clearRect(0, 0, W, H);
-
-    // Draw different screens based on current state
-    console.log('Drawing screen:', state.currentScreen);
     
     // Draw the current screen
     if (state.currentScreen === 'game') {
@@ -942,8 +912,6 @@
     const confettiFrameDuration = 1000 / 30; // ~33ms per frame
     const elapsed = Date.now() - state.confettiStartTime;
     state.confettiFrame = Math.floor(elapsed / confettiFrameDuration);
-    
-    console.log(`🎊 Confetti frame: ${state.confettiFrame} / 21, elapsed: ${elapsed}ms`);
 
     if (state.score <= 0) {
       state.showingConfetti = false;
@@ -960,7 +928,6 @@
     
     // Draw confetti overlay on top of whatever is currently on screen
     const confettiKey = `confetti${state.confettiFrame}`;
-    console.log(`Drawing confetti key: ${confettiKey}`);
     if (images[confettiKey]) {
       // Draw confetti to fill entire screen
       const imgAspect = images[confettiKey].width / images[confettiKey].height;
@@ -983,14 +950,10 @@
       }
       
       ctx.drawImage(images[confettiKey], drawX, drawY, drawWidth, drawHeight);
-    } else {
-      console.log(`Confetti image not found: ${confettiKey}`);
     }
   }
 
   function drawFinalScreen(W, H) {
-    console.log('Drawing final screen...', images.finalScreen ? 'Image loaded' : 'No image, using fallback');
-    console.log(`Selected product: ${state.selectedProduct}`);
     
     // Draw background template
     if (images.finalScreen) {
@@ -1050,9 +1013,7 @@
       const productY = productCenterY - productHeight / 2;
       
       ctx.drawImage(productImg, productX, productY, productWidth, productHeight);
-      console.log(`Drew product ${state.selectedProduct} at center`);
     } else {
-      console.log(`Product image ${productKey} not found`);
       // Fallback - draw a placeholder
       ctx.fillStyle = '#FF6B6B';
       ctx.fillRect(W * 0.3, H * 0.3, W * 0.4, H * 0.3);
@@ -1074,9 +1035,7 @@
       const qrY = qrCenterY - qrSize / 2;
       
       ctx.drawImage(images[qrKey], qrX, qrY, qrSize, qrSize);
-      console.log(`Drew QR code ${state.selectedProduct} at bottom`);
     } else {
-      console.log(`QR code image ${qrKey} not found`);
       // Fallback - draw a placeholder QR
       const qrSize = Math.min(W * 0.25, H * 0.15);
       const qrX = W / 2 - qrSize / 2;
@@ -1095,15 +1054,10 @@
   let gameInitialized = false;
   async function initGame() {
     if (gameInitialized) {
-      console.log('Game already initialized, skipping');
       return;
     }
     gameInitialized = true;
     
-    console.log('Game initialized');
-    console.log('Canvas size:', canvas.width, 'x', canvas.height);
-    
-    console.log('State:', state);
     
     // Set initial ground position (matching resizeCanvas formula)
     state.groundY = canvas.height - Math.max(50, canvas.height * 0.026);
@@ -1114,13 +1068,9 @@
     // Auto-enable microphone
     try {
       await enableMic();
-      console.log('Microphone auto-enabled');
     } catch (e) {
       console.warn('Could not auto-enable microphone:', e);
     }
-    
-    // Initialize button states
-    // Button update removed
     
     // Start the game loop
     requestAnimationFrame(update);
@@ -1128,13 +1078,11 @@
 
   // Debug helper - call from console if needed
   window.forceStartGame = function() {
-    console.log('Force starting game...');
     startGameTransition();
   };
 
   // Wait for images and sounds to load before starting
   Promise.all([...imagePromises, ...soundPromises]).then(() => {
-    console.log('Images and sounds loaded successfully');
     initGame();
   }).catch(err => {
     console.warn('Some assets failed to load, using fallbacks:', err);
@@ -1157,28 +1105,23 @@
     if (document.hidden) {
       // Reset lastTs when tab becomes hidden to prevent large deltaTime jump
       state.lastTs = 0;
-      console.log('Tab hidden - reset timing');
     } else {
       // Reset lastTs when tab becomes visible again
       state.lastTs = 0;
-      console.log('Tab visible - reset timing');
     }
   });
 
   // Handle window blur/focus for better cross-browser support
   window.addEventListener('blur', () => {
     state.lastTs = 0;
-    console.log('Window blur - reset timing');
   });
 
   window.addEventListener('focus', () => {
     state.lastTs = 0;
-    console.log('Window focus - reset timing');
   });
 
   // Initialize front screen and game loop when page loads (same as folder 2)
   document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOMContentLoaded - initializing front screen and game');
     initFrontScreen();
     initGame(); // Start game loop immediately
   });
