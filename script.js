@@ -132,70 +132,57 @@
   // Make sure canvas can receive keyboard events
   canvas.focus();
 
-  // ====== Splash Screen Management ======
-  let splashScreen, gameScreen;
+  // ====== Front Screen Management (Same as Folder 2) ======
+  let frontScreenElement;
+  let gameScreenElement;
+  let openingScreenElement;
   
-    function initSplashScreen() {
-      splashScreen = document.getElementById('splashScreen');
-      gameScreen = document.getElementById('gameScreen');
-      
-      console.log('Splash screen element:', splashScreen);
-      console.log('Game screen element:', gameScreen);
-      
-      if (!splashScreen || !gameScreen) {
-        console.error('Splash screen elements not found');
-        // Fallback: show game immediately if splash screen not found
-        if (gameScreen) {
-          gameScreen.classList.remove('hidden');
-        }
-        return;
-      }
-      
-      let gameStarted = false; // Prevent multiple calls
-      
-      function showGame() {
-        if (gameStarted) return; // Prevent double execution
-        gameStarted = true;
-        
-        console.log('Starting game...');
-        splashScreen.style.display = 'none';
-        gameScreen.classList.remove('hidden');
-        
-        // Auto-start the game
-        setTimeout(() => {
-          canvas.focus();
-          state.currentScreen = 'game';
-          startGame(); // Auto-start the game
-          console.log('Game screen shown, canvas focused, and game auto-started');
-        }, 100);
-      }
-      
-      // Single click handler on the entire splash screen (simpler and more reliable)
-      splashScreen.addEventListener('click', (e) => {
-        console.log('Splash screen clicked');
-        showGame();
-      });
-      
-      // Touch events for mobile
-      splashScreen.addEventListener('touchstart', (e) => {
-        console.log('Splash screen touched');
-        e.preventDefault();
-        showGame();
-      });
-      
-      // Keyboard support for splash screen
-      document.addEventListener('keydown', (e) => {
-        if (gameScreen && !gameScreen.classList.contains('hidden')) return; // Only on splash screen
-        
-        if (e.code === 'Space' || e.code === 'Enter') {
-          e.preventDefault();
-          console.log('Keyboard start triggered');
-          showGame();
-        }
-      });
-      
-      console.log('Splash screen initialized');
+  function initFrontScreen() {
+    frontScreenElement = document.getElementById('frontScreen');
+    gameScreenElement = document.getElementById('gameScreen');
+    openingScreenElement = document.getElementById('openingScreen');
+    
+    // Add click event to opening screen image
+    if (openingScreenElement) {
+      openingScreenElement.addEventListener('click', startGameTransition);
     }
+    
+    // Keyboard support
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'Enter') {
+        const frontScreen = document.getElementById('frontScreen');
+        if (frontScreen && window.getComputedStyle(frontScreen).display !== 'none') {
+          e.preventDefault();
+          startGameTransition();
+        }
+      }
+    });
+  }
+  
+  function startGameTransition() {
+    // Hide front screen
+    if (frontScreenElement) {
+      frontScreenElement.style.display = 'none';
+    }
+    
+    // Show game screen
+    if (gameScreenElement) {
+      gameScreenElement.style.display = 'block';
+      gameScreenElement.classList.remove('hidden');
+    }
+    
+    // Unmute and play background music
+    const music = document.getElementById('bgMusic');
+    if (music) {
+      music.muted = false;
+      music.play().catch(err => console.log('Audio autoplay prevented:', err));
+    }
+    
+    // Focus canvas and start game
+    canvas.focus();
+    state.currentScreen = 'game';
+    startGame();
+  }
 
   // Load images
   const images = {};
@@ -528,7 +515,8 @@
 
   // ====== Controls ======
   // Canvas click handler for different screens
-  canvas.addEventListener('click', () => {
+  // Handle screen navigation and interactions
+  function handleCanvasInteraction() {
     if (state.currentScreen === 'win') {
       // Go to final screen when win screen is clicked
       // Randomize product selection (1-15)
@@ -545,11 +533,24 @@
       // Restart game when lose screen is clicked
       restartGame();
       console.log('Restarting game from lose screen');
+    } else if (state.currentScreen === 'game' && state.running && !state.paused) {
+      // Jump during gameplay
+      console.log('Cart jumping (touch/click)...');
+      cart.jump();
     } else {
       canvas.focus();
       console.log('Canvas focused');
     }
-  });
+  }
+
+  canvas.addEventListener('click', handleCanvasInteraction);
+  
+  // Touch event for mobile - use touchend for better reliability
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault(); // Prevent click event from also firing
+    console.log('Canvas touched');
+    handleCanvasInteraction();
+  }, { passive: false });
   
   // Removed button event listeners - buttons no longer exist
   
@@ -673,27 +674,42 @@
     drawSequentialMaps();
   }
   
+  // Cache map dimensions to avoid recalculating every frame
+  let cachedMapDimensions = null;
+  let lastCanvasSize = { width: 0, height: 0 };
+
   function drawSequentialMaps() {
     if (!images.map) return;
     
-    // Calculate dimensions for both maps (assuming same height)
-    const targetHeight = canvas.height * 0.8; // Use 80% of canvas height
+    // Recalculate dimensions only if canvas size changed
+    if (!cachedMapDimensions || 
+        lastCanvasSize.width !== canvas.width || 
+        lastCanvasSize.height !== canvas.height) {
+      
+      const targetHeight = canvas.height * 0.8; // Use 80% of canvas height
+      const mapScale = targetHeight / images.map.height;
+      
+      cachedMapDimensions = {
+        width: images.map.width * mapScale,
+        height: targetHeight,
+        y: canvas.height - targetHeight,
+        cyclesNeeded: Math.ceil(canvas.width / (images.map.width * mapScale)) + 1
+      };
+      
+      lastCanvasSize = { width: canvas.width, height: canvas.height };
+    }
     
-    // Map  dimensions  
-    const mapScale = targetHeight / images.map.height;
-    const mapScaledWidth = images.map.width * mapScale;
-    const mapScaledHeight = targetHeight;
-    
-    // Calculate how many complete cycles we need to fill the screen
-    const cyclesNeeded = Math.ceil(canvas.width / mapScaledWidth) + 1;
-    
-    const y = canvas.height - mapScaledHeight; // Position at bottom of canvas
+    const { width: mapScaledWidth, height: mapScaledHeight, y, cyclesNeeded } = cachedMapDimensions;
     
     // Draw multiple cycles of the combined maps
+    // Use bitwise OR for faster modulo with power-of-2-like behavior
+    const scrollOffset = state.mapScrollOffset % mapScaledWidth;
+    
     for (let cycle = 0; cycle < cyclesNeeded; cycle++) {
       const cycleOffset = cycle * mapScaledWidth;
+      const mapX = cycleOffset - scrollOffset;
       
-      const mapX = cycleOffset - (state.mapScrollOffset % mapScaledWidth);
+      // Only draw if visible on screen
       if (mapX + mapScaledWidth > 0 && mapX < canvas.width) {
         ctx.drawImage(images.map, mapX, y, mapScaledWidth, mapScaledHeight);
       }
@@ -702,7 +718,12 @@
 
   function update(ts) {
     if (!state.lastTs) state.lastTs = ts;
-    const dt = Math.min((ts - state.lastTs) / 1000, 0.033);
+    
+    // Better deltaTime handling to prevent stuttering
+    const rawDt = (ts - state.lastTs) / 1000;
+    // Cap deltaTime more aggressively to prevent large jumps after tab switches
+    // Also set a minimum to prevent too-small values
+    const dt = Math.max(0.008, Math.min(rawDt, 0.025)); // Between 8ms and 25ms
     state.lastTs = ts;
 
     // Voice jump detection
@@ -760,11 +781,9 @@
     // Update scroll offset for background
     state.scrollOffset += state.scrollSpeed * dt;
     
-    // Update map scrolling (only scroll for 30 seconds)
-    const elapsedTime = (ts - state.gameStartTime) / 1000;
-    if (elapsedTime < 30) {
-      state.mapScrollOffset += state.scrollSpeed * dt;
-    }
+    // Keep map scrolling continuously for smooth visual experience
+    // (No longer stopping at 30 seconds to prevent stuttering)
+    state.mapScrollOffset += state.scrollSpeed * dt;
 
     // Update cart
     cart.update(dt);
@@ -1047,7 +1066,14 @@
   }
 
   // Initialize game
+  let gameInitialized = false;
   async function initGame() {
+    if (gameInitialized) {
+      console.log('Game already initialized, skipping');
+      return;
+    }
+    gameInitialized = true;
+    
     console.log('Game initialized');
     console.log('Canvas size:', canvas.width, 'x', canvas.height);
     
@@ -1068,45 +1094,15 @@
     // Initialize button states
     // Button update removed
     
-    // Initialize splash screen
-    initSplashScreen();
-    
     // Start the game loop
     requestAnimationFrame(update);
   }
 
-  // Debug function - you can call this from console
-  window.debugSplashScreen = function() {
-    console.log('=== SPLASH SCREEN DEBUG ===');
-    console.log('Splash screen element:', document.getElementById('splashScreen'));
-    console.log('Game screen element:', document.getElementById('gameScreen'));
-    console.log('Start button element:', document.querySelector('.start-button'));
-    console.log('Splash screen classes:', document.getElementById('splashScreen')?.className);
-    console.log('Game screen classes:', document.getElementById('gameScreen')?.className);
-    console.log('Canvas element:', document.getElementById('game'));
-    console.log('========================');
-  };
-  
-  // Force start game function - you can call this from console
+  // Debug helper - call from console if needed
   window.forceStartGame = function() {
     console.log('Force starting game...');
-    const splash = document.getElementById('splashScreen');
-    const game = document.getElementById('gameScreen');
-    if (splash && game) {
-      splash.style.display = 'none';
-      game.classList.remove('hidden');
-      canvas.focus();
-      console.log('Game force started!');
-    } else {
-      console.error('Cannot force start - elements not found');
-    }
+    startGameTransition();
   };
-  
-  // Auto-run debug on load
-  setTimeout(() => {
-    console.log('Auto-running splash screen debug...');
-    window.debugSplashScreen();
-  }, 1000);
 
   // Wait for images and sounds to load before starting
   Promise.all([...imagePromises, ...soundPromises]).then(() => {
@@ -1126,5 +1122,36 @@
     }
   });
   ro.observe(canvas);
+
+  // Handle page visibility changes to prevent timing issues
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // Reset lastTs when tab becomes hidden to prevent large deltaTime jump
+      state.lastTs = 0;
+      console.log('Tab hidden - reset timing');
+    } else {
+      // Reset lastTs when tab becomes visible again
+      state.lastTs = 0;
+      console.log('Tab visible - reset timing');
+    }
+  });
+
+  // Handle window blur/focus for better cross-browser support
+  window.addEventListener('blur', () => {
+    state.lastTs = 0;
+    console.log('Window blur - reset timing');
+  });
+
+  window.addEventListener('focus', () => {
+    state.lastTs = 0;
+    console.log('Window focus - reset timing');
+  });
+
+  // Initialize front screen and game loop when page loads (same as folder 2)
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOMContentLoaded - initializing front screen and game');
+    initFrontScreen();
+    initGame(); // Start game loop immediately
+  });
 
 })();
