@@ -1,0 +1,406 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh; /* Dynamic viewport height for mobile */
+  overflow: hidden;
+  background: #000;
+  font-family: Arial, sans-serif;
+  /* Mobile optimizations */
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  position: fixed;
+}
+
+/* Safe area insets for notched devices (iPhone X, etc.) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+canvas {
+  display: block;
+  background: #87CEEB;
+  outline: none;
+  margin: 0 auto;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  /* Canvas dimensions are set by JavaScript for exact 9:16 ratio */
+  max-width: 100vw;
+  max-height: 100vh;
+  /* Ensure crisp pixel rendering */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* Optimized for 1080x1920 portrait screens */
+@media (orientation: portrait) and (max-width: 1200px) {
+  canvas {
+    width: 100vw !important;
+    height: auto !important;
+    max-height: 100vh;
+  }
+}
+
+/* Optimized for landscape screens (when rotated) */
+@media (orientation: landscape) and (max-height: 1200px) {
+  canvas {
+    height: 100vh !important;
+    width: auto !important;
+    max-width: 100vw;
+  }
+}
+
+/* For very large screens, maintain maximum size */
+@media (min-width: 1200px) or (min-height: 2000px) {
+  canvas {
+    max-width: 1080px;
+    max-height: 1920px;
+  }
+}
+
+.hud {
+  position: fixed;
+  top: 2vh;
+  left: 2vw;
+  color: white;
+  font-size: clamp(20px, 2.5vw, 32px);
+  font-weight: bold;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  z-index: 100;
+  line-height: 1.4;
+}
+
+/* Optimized HUD for 1080x1920 portrait screens */
+@media (orientation: portrait) and (max-width: 1200px) {
+  .hud {
+    font-size: clamp(24px, 3vw, 36px);
+    top: 3vh;
+    left: 3vw;
+  }
+  
+  .volume-indicator {
+    font-size: clamp(18px, 2.2vw, 28px);
+    margin-top: 1vh;
+  }
+  
+  .volume-bar {
+    width: clamp(200px, 25vw, 300px);
+    height: clamp(12px, 1.5vh, 20px);
+  }
+}
+
+/* Optimized HUD for landscape screens */
+@media (orientation: landscape) and (max-height: 1200px) {
+  .hud {
+    font-size: clamp(18px, 2vh, 28px);
+    top: 2vh;
+    left: 2vw;
+  }
+  
+  .volume-indicator {
+    font-size: clamp(14px, 1.8vh, 22px);
+    margin-top: 1vh;
+  }
+  
+  .volume-bar {
+    width: clamp(150px, 20vh, 250px);
+    height: clamp(10px, 1.2vh, 16px);
+  }
+}
+
+/* For very large screens */
+@media (min-width: 1200px) or (min-height: 2000px) {
+  .hud {
+    font-size: 32px;
+    top: 40px;
+    left: 40px;
+  }
+  
+  .volume-indicator {
+    font-size: 24px;
+  }
+  
+  .volume-bar {
+    width: 300px;
+    height: 18px;
+  }
+}
+
+.volume-indicator {
+  margin-top: 10px;
+  font-size: 18px;
+}
+
+.volume-bar {
+  width: 200px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.volume-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #FF9800, #F44336);
+  width: 0%;
+  transition: width 0.1s ease;
+  border-radius: 4px;
+}
+
+.instructions {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  text-align: center;
+  font-size: 32px;
+  font-weight: bold;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  z-index: 100;
+  background: rgba(0,0,0,0.7);
+  padding: 30px;
+  border-radius: 15px;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Splash Screen Styles */
+.splash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.splash-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  /* Ensure crisp rendering on high-DPI screens */
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.splash-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.splash-text {
+  text-align: center;
+  color: white;
+  max-width: 80%;
+}
+
+.splash-text h1 {
+  font-size: 48px;
+  font-weight: bold;
+  margin-bottom: 20px;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.splash-text p {
+  font-size: 24px;
+  margin-bottom: 40px;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  line-height: 1.4;
+}
+
+.tap-to-start {
+  margin-top: 20px;
+}
+
+.start-button {
+  background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+  color: white;
+  border: 3px solid #fff;
+  border-radius: 15px;
+  padding: 20px 40px;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+  transition: all 0.3s ease;
+  animation: pulse 2s infinite;
+}
+
+.start-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.4);
+}
+
+.start-button:active {
+  transform: scale(0.95);
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
+  50% { box-shadow: 0 8px 16px rgba(255,107,107,0.5); }
+  100% { box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
+}
+
+/* Game Screen */
+.game-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+/* Responsive splash screen optimized for 1080x1920 */
+@media (orientation: portrait) and (max-width: 1200px) {
+  .splash-text h1 {
+    font-size: clamp(36px, 4.5vw, 54px);
+    margin-bottom: clamp(15px, 2vh, 30px);
+  }
+  
+  .splash-text p {
+    font-size: clamp(18px, 2.5vw, 28px);
+    margin-bottom: clamp(30px, 4vh, 50px);
+  }
+  
+  .start-button {
+    font-size: clamp(20px, 2.8vw, 32px);
+    padding: clamp(15px, 2vh, 25px) clamp(30px, 4vw, 50px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 1200px) {
+  .splash-text h1 {
+    font-size: clamp(28px, 3.5vh, 42px);
+    margin-bottom: clamp(10px, 1.5vh, 20px);
+  }
+  
+  .splash-text p {
+    font-size: clamp(16px, 2vh, 24px);
+    margin-bottom: clamp(20px, 3vh, 35px);
+  }
+  
+  .start-button {
+    font-size: clamp(18px, 2.2vh, 26px);
+    padding: clamp(12px, 1.8vh, 20px) clamp(25px, 3.5vh, 40px);
+  }
+}
+
+/* For very large screens */
+@media (min-width: 1200px) or (min-height: 2000px) {
+  .splash-text h1 {
+    font-size: 54px;
+    margin-bottom: 30px;
+  }
+  
+  .splash-text p {
+    font-size: 28px;
+    margin-bottom: 50px;
+  }
+  
+  .start-button {
+    font-size: 28px;
+    padding: 25px 50px;
+  }
+}
+
+/* Control buttons removed - no longer needed */
+
+/* Additional mobile optimizations for small screens */
+@media screen and (max-width: 768px) {
+  .splash-image {
+    object-fit: contain; /* Better fit for mobile screens */
+  }
+  
+  .start-button {
+    padding: 15px 30px;
+    font-size: 20px;
+  }
+}
+
+/* Very small phones (iPhone SE, older Androids) */
+@media screen and (max-width: 375px) {
+  .splash-text h1 {
+    font-size: 32px;
+  }
+  
+  .splash-text p {
+    font-size: 16px;
+  }
+  
+  .start-button {
+    padding: 12px 24px;
+    font-size: 18px;
+  }
+  
+  .hud {
+    font-size: 20px;
+    top: 2vh;
+    left: 2vw;
+  }
+}
+
+/* Landscape mode for mobile */
+@media screen and (max-height: 500px) and (orientation: landscape) {
+  .splash-text h1 {
+    font-size: 28px;
+    margin-bottom: 10px;
+  }
+  
+  .splash-text p {
+    font-size: 14px;
+    margin-bottom: 15px;
+  }
+  
+  .start-button {
+    padding: 10px 20px;
+    font-size: 16px;
+  }
+}
