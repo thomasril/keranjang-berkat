@@ -310,12 +310,11 @@
       this.y += this.vy * dt;
       
       // Check ceiling collision - prevent cart from going above screen
+      // BUT don't reset velocity - allow cart to hover at top with repeated sounds
       if (this.y <= 0) {
-        this.y = 0; // Keep cart at top of screen
-        // Only stop upward velocity, allow cart to fall back down
-        if (this.vy < 0) {
-          this.vy = 0; // Stop moving up
-        }
+        this.y = 0; // Clamp position at top of screen
+        // Don't reset velocity - this allows cart to stay up with repeated "ah ah ah" sounds
+        // The gravity will naturally pull it down, but new sounds can keep it up
       }
       
       // Check ground collision (accounting for higher cart position)
@@ -453,7 +452,9 @@
     ctx: null, analyser: null, data: null, enabled: false,
     lastTrigger: 0, smoothing: 0.2,
     smoothedLevel: 0, // For exponential smoothing
-    wasAboveThreshold: false // Track if we were already above threshold (edge detection)
+    wasAboveThreshold: false, // Track if we were already above threshold (edge detection)
+    previousLevel: 0, // Track previous level for peak detection
+    peakDetected: false // Track if we're currently in a peak
   };
 
   async function enableMic() {
@@ -463,7 +464,7 @@
       const src = audio.ctx.createMediaStreamSource(stream);
       audio.analyser = audio.ctx.createAnalyser();
       audio.analyser.fftSize = 1024;
-      audio.analyser.smoothingTimeConstant = 0.8; // Balanced smoothing (was 0.8) - smooths peaks but allows drops between words
+      audio.analyser.smoothingTimeConstant = 0.5; // Reduced smoothing for faster response - allows level to drop between rapid words
       src.connect(audio.analyser);
       audio.data = new Uint8Array(audio.analyser.frequencyBinCount);
       audio.enabled = true;
@@ -484,8 +485,8 @@
     }
     const rawLevel = maxDev / 128;
     
-    // Apply exponential smoothing to reduce jitter and multiple peaks
-    const smoothingFactor = 0.3; // More responsive (was 0.3) - balances smoothing with responsiveness
+    // Apply exponential smoothing to reduce jitter while keeping responsiveness
+    const smoothingFactor = 0.3; // More responsive (increased from 0.3) - allows faster level changes for peak detection
     audio.smoothedLevel = (smoothingFactor * rawLevel) + ((1 - smoothingFactor) * audio.smoothedLevel);
     
     return audio.smoothedLevel;
@@ -493,23 +494,36 @@
 
   function handleVoiceJump(level) {
     const now = performance.now();
-    const threshold = 0.1; // Higher threshold - less sensitive
-    const cooldown = 200; // Shorter cooldown for faster response (was 600ms)
+    const threshold = 0.1; // Minimum threshold to consider
+    const cooldown = 100; // Shorter cooldown for rapid detection (was 200ms)
+    const peakThreshold = 0; // How much level must increase to be considered a peak
     
     const isAboveThreshold = level >= threshold;
     
-    // Rising edge detection: Only trigger when crossing from below to above threshold
-    // AND cooldown has passed
-    if (isAboveThreshold && !audio.wasAboveThreshold && (now - audio.lastTrigger) > cooldown) {
+    // Calculate level increase from previous frame
+    const levelIncrease = level - audio.previousLevel;
+    
+    // Peak detection: Trigger on significant upward spike
+    // Detects each "test" even if level doesn't drop below threshold between words
+    const isPeak = levelIncrease > peakThreshold && isAboveThreshold;
+    
+    // Trigger if:
+    // 1. We detect a peak (sudden increase in level)
+    // 2. Cooldown has passed
+    if (isPeak && (now - audio.lastTrigger) > cooldown) {
       audio.lastTrigger = now;
+      audio.peakDetected = true;
       
       // Flappy Bird style: Use consistent flap velocity
       cart.jump();
-      
+    } else if (levelIncrease < -0.05) {
+      // Reset peak detection when level drops significantly
+      audio.peakDetected = false;
     }
     
-    // Update threshold state for next frame
+    // Update state for next frame
     audio.wasAboveThreshold = isAboveThreshold;
+    audio.previousLevel = level;
   }
 
   // ====== Controls ======
@@ -845,7 +859,7 @@
     // Draw shadow for better visibility
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillText(`Score: ${state.score}`, W * 0.05 + 3, H * 0.04 + 3);
-
+    
     // Draw main text
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(`Score: ${state.score}`, W * 0.05, H * 0.04);
