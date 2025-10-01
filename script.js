@@ -493,8 +493,8 @@
 
   function handleVoiceJump(level) {
     const now = performance.now();
-    const threshold = 0.25; // Higher threshold - less sensitive
-    const cooldown = 300; // Shorter cooldown for faster response (was 600ms)
+    const threshold = 0.1; // Higher threshold - less sensitive
+    const cooldown = 200; // Shorter cooldown for faster response (was 600ms)
     
     const isAboveThreshold = level >= threshold;
     
@@ -845,7 +845,7 @@
     // Draw shadow for better visibility
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillText(`Score: ${state.score}`, W * 0.05 + 3, H * 0.04 + 3);
-    
+
     // Draw main text
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(`Score: ${state.score}`, W * 0.05, H * 0.04);
