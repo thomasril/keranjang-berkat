@@ -494,8 +494,8 @@
 
   function handleVoiceJump(level) {
     const now = performance.now();
-    const threshold = 0.1; // Minimum threshold to consider
-    const cooldown = 100; // Shorter cooldown for rapid detection (was 200ms)
+    const threshold = 0.25; // Minimum threshold to consider
+    const cooldown = 250; // Shorter cooldown for rapid detection (was 200ms)
     const peakThreshold = 0; // How much level must increase to be considered a peak
     
     const isAboveThreshold = level >= threshold;
